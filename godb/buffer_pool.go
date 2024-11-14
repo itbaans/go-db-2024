@@ -18,19 +18,33 @@ const (
 )
 
 type BufferPool struct {
-	// TODO: some code goes here
+	numPages int                  // Capacity of the buffer pool
+	pages    map[interface{}]Page // Map to store pages by key (e.g., DBFile.pageKey)
 }
 
 // Create a new BufferPool with the specified number of pages
 func NewBufferPool(numPages int) (*BufferPool, error) {
-	return &BufferPool{}, fmt.Errorf("NewBufferPool not implemented")
+	return &BufferPool{
+		numPages: numPages,
+		pages:    make(map[interface{}]Page),
+	}, nil
 }
 
 // Testing method -- iterate through all pages in the buffer pool
 // and flush them using [DBFile.flushPage]. Does not need to be thread/transaction safe.
 // Mark pages as not dirty after flushing them.
-func (bp *BufferPool) FlushAllPages() {
-	// TODO: some code goes here
+func (bp *BufferPool) FlushAllPages() error {
+	for _, page := range bp.pages {
+		if page.isDirty() {
+			f := page.getFile()
+			err := f.flushPage(page) // Assuming flushPage writes to disk
+			if err != nil {
+				return err
+			}
+			page.setDirty(0, false) // Mark page as not dirty after flushing
+		}
+	}
+	return nil
 }
 
 // Abort the transaction, releasing locks. Because GoDB is FORCE/NO STEAL, none
@@ -69,5 +83,36 @@ func (bp *BufferPool) BeginTransaction(tid TransactionID) error {
 // implement locking or deadlock detection. You will likely want to store a list
 // of pages in the BufferPool in a map keyed by the [DBFile.pageKey].
 func (bp *BufferPool) GetPage(file DBFile, pageNo int, tid TransactionID, perm RWPerm) (Page, error) {
-	return nil, fmt.Errorf("GetPage not implemented")
+	pageKey := file.pageKey(pageNo) // Unique key for the page
+
+	// Check if page is already in buffer pool
+	if page, exists := bp.pages[pageKey]; exists {
+		return page, nil
+	}
+
+	// If the page is not cached, check if we have space to add it
+	if len(bp.pages) >= bp.numPages {
+		// Handle eviction if buffer pool is full
+		evicted := false
+		for key, page := range bp.pages {
+			if !page.isDirty() {
+				delete(bp.pages, key) // Remove a clean page
+				evicted = true
+				break
+			}
+		}
+		if !evicted {
+			return nil, fmt.Errorf("all pages are dirty, cannot evict any page")
+		}
+	}
+
+	// Load the page from disk using the DBFile's readPage method
+	newPage, err := file.readPage(pageNo)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the new page to the buffer pool
+	bp.pages[pageKey] = newPage
+	return newPage, nil
 }

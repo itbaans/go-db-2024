@@ -1,6 +1,7 @@
 package godb
 
 import (
+	"fmt"
 	"testing"
 	"unsafe"
 )
@@ -274,6 +275,7 @@ func TestHeapPageBufferLen(t *testing.T) {
 	buf, _ := page.toBuffer()
 
 	if buf.Len() != PageSize {
+		fmt.Println(buf.Len(), hf.pageSize)
 		t.Fatalf("HeapPage.toBuffer returns buffer of unexpected size;  NOTE:  This error may be OK, but many implementations that don't write full pages break.")
 	}
 }

@@ -2,6 +2,7 @@ package godb
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 )
 
@@ -47,51 +48,108 @@ dirty page, it's OK if tuples are renumbered when they are written back to disk.
 
 */
 
+type HeapRecordID struct {
+	PageID int
+	Slot   int
+}
+
+// Implement the recordID interface methods for HeapRecordID here.
+// For instance, if recordID requires methods like GetPageID and GetSlot, implement them:
+func (r *HeapRecordID) GetPageID() int {
+	return r.PageID
+}
+
+func (r *HeapRecordID) GetSlot() int {
+	return r.Slot
+}
+
 type heapPage struct {
-	// TODO: some code goes here
+	pageID    int
+	tuples    []*Tuple      // Array to store tuples
+	numSlots  int           // Total number of slots
+	usedSlots int           // Number of used slots
+	is_dirty  bool          // Dirty flag
+	tid       TransactionID // Transaction ID for dirty page
+	file      *HeapFile     // Reference to the HeapFile
 }
 
 // Construct a new heap page
 func newHeapPage(desc *TupleDesc, pageNo int, f *HeapFile) (*heapPage, error) {
-	// TODO: some code goes here
-	return &heapPage{}, fmt.Errorf("newHeapPage is not implemented") //replace me
+	// Calculate the number of slots based on the tuple size and page size
+	t_size := 0
+	for _, field := range desc.Fields {
+		switch field.Ftype {
+		case IntType:
+			t_size += 8
+		case StringType:
+			t_size += 32
+		default:
+			// Handle unknown or unsupported types
+			panic(fmt.Sprintf("unsupported type: %v", field.Ftype))
+		}
+	}
+	remPageSize := PageSize - 8 // Assume 8 bytes are used for header
+	numSlots := remPageSize / t_size
+
+	return &heapPage{
+		pageID:    pageNo,
+		numSlots:  numSlots,
+		usedSlots: 0,
+		tuples:    make([]*Tuple, numSlots),
+		is_dirty:  false,
+		file:      f,
+	}, nil
 }
 
 func (h *heapPage) getNumSlots() int {
-	// TODO: some code goes here
-	return 0 //replace me
+	return h.numSlots
 }
 
 // Insert the tuple into a free slot on the page, or return an error if there are
 // no free slots.  Set the tuples rid and return it.
 func (h *heapPage) insertTuple(t *Tuple) (recordID, error) {
-	// TODO: some code goes here
-	return 0, fmt.Errorf("insertTuple not implemented") //replace me
+	for i := 0; i < h.numSlots; i++ {
+		if h.tuples[i] == nil { // Found an empty slot
+			h.tuples[i] = t
+			h.usedSlots++
+			t.Rid = &HeapRecordID{PageID: h.pageID, Slot: i}
+			return t.Rid, nil // Return as recordID
+		}
+	}
+	return nil, fmt.Errorf("no available slot")
 }
 
 // Delete the tuple at the specified record ID, or return an error if the ID is
 // invalid.
 func (h *heapPage) deleteTuple(rid recordID) error {
-	// TODO: some code goes here
-	return fmt.Errorf("deleteTuple not implemented") //replace me
+	heapRid, ok := rid.(*HeapRecordID)
+	if !ok || heapRid.Slot >= h.numSlots || h.tuples[heapRid.Slot] == nil {
+		return fmt.Errorf("invalid recordID or slot is already empty")
+	}
+	h.tuples[heapRid.Slot] = nil
+	h.usedSlots--
+	return nil
 }
 
 // Page method - return whether or not the page is dirty
 func (h *heapPage) isDirty() bool {
-	// TODO: some code goes here
-	return false //replace me
+	return h.is_dirty
 }
 
 // Page method - mark the page as dirty
 func (h *heapPage) setDirty(tid TransactionID, dirty bool) {
-	// TODO: some code goes here
+	h.is_dirty = dirty // Mark the page as dirty or clean
+	if dirty {
+		h.tid = tid // Associate this dirty page with the modifying transaction
+	} else {
+		h.tid = 0 // Clear the transaction ID if the page is not dirty
+	}
 }
 
 // Page method - return the corresponding HeapFile
 // for this page.
 func (p *heapPage) getFile() DBFile {
-	// TODO: some code goes here
-	return nil //replace me
+	return p.file
 }
 
 // Allocate a new bytes.Buffer and write the heap page to it. Returns an error
@@ -100,22 +158,103 @@ func (p *heapPage) getFile() DBFile {
 // the binary.Write method in LittleEndian order, followed by the tuples of the
 // page, written using the Tuple.writeTo method.
 func (h *heapPage) toBuffer() (*bytes.Buffer, error) {
-	// TODO: some code goes here
-	return nil, fmt.Errorf("heap_page.toBuffer not implemented") //replace me
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, int32(h.numSlots))
+	if err != nil {
+		return nil, err
+	}
+	err = binary.Write(buf, binary.LittleEndian, int32(h.usedSlots))
+	if err != nil {
+		return nil, err
+	}
+	// Write tuples to buffer (assuming Tuple has WriteTo method)
+	for _, tuple := range h.tuples {
+		if tuple != nil {
+			err := tuple.writeTo(buf)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Pad buffer to PageSize if necessary
+	remaining := PageSize - buf.Len()
+	if remaining > 0 {
+		err := binary.Write(buf, binary.LittleEndian, make([]byte, remaining))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return buf, nil
 }
 
 // Read the contents of the HeapPage from the supplied buffer.
 func (h *heapPage) initFromBuffer(buf *bytes.Buffer) error {
-	// TODO: some code goes here
-	return fmt.Errorf("initFromBuffer not implemented") //replace me
+	var numSlots int32
+	if err := binary.Read(buf, binary.LittleEndian, &numSlots); err != nil {
+		fmt.Println("Error1 :", err)
+		return fmt.Errorf("error reading number of slots: %w", err)
+	}
+	var usedSlots int32
+	if err := binary.Read(buf, binary.LittleEndian, &usedSlots); err != nil {
+		fmt.Println("Error2:", err)
+		return fmt.Errorf("error reading number of slots: %w", err)
+	}
+	h.numSlots = int(numSlots)
+	h.usedSlots = int(usedSlots)
+
+	h.tuples = make([]*Tuple, h.numSlots)
+	// Read tuples from buffer
+	for i := 0; i < h.usedSlots; i++ {
+		tuple, err := readTupleFrom(buf, h.file.tupleDesc)
+		if err != nil {
+			fmt.Println("Error3:", err)
+			return fmt.Errorf("error reading number of slots: %w", err)
+		}
+		h.tuples[i] = tuple
+	}
+	return nil
 }
+
+// func (h *heapPage) initFromBuffer(buf *bytes.Buffer) error {
+// 	// Read header
+// 	if err := binary.Read(buf, binary.LittleEndian, &h.numSlots); err != nil {
+// 		return fmt.Errorf("error reading number of slots: %w", err)
+// 	}
+// 	if err := binary.Read(buf, binary.LittleEndian, &h.usedSlots); err != nil {
+// 		return fmt.Errorf("error reading used slots: %w", err)
+// 	}
+
+// 	// Read tuples
+// 	h.tuples = make([]*Tuple, h.numSlots)
+// 	for i := 0; i < h.numSlots; i++ {
+// 		t := new(Tuple)
+// 		if err := t.readFrom(buf, h.desc); err != nil {
+// 			return fmt.Errorf("error reading tuple at slot %d: %w", i, err)
+// 		}
+// 		if t != nil && t.isValid() {
+// 			h.tuples[i] = t
+// 		}
+// 	}
+
+// 	return nil
+// }
 
 // Return a function that iterates through the tuples of the heap page.  Be sure
 // to set the rid of the tuple to the rid struct of your choosing beforing
 // return it. Return nil, nil when the last tuple is reached.
-func (p *heapPage) tupleIter() func() (*Tuple, error) {
-	// TODO: some code goes here
+func (h *heapPage) tupleIter() func() (*Tuple, error) {
+	i := 0
 	return func() (*Tuple, error) {
-	return nil, fmt.Errorf("heap_file.Iterator not implemented") // replace me
+		for i < len(h.tuples) {
+			tuple := h.tuples[i]
+			i++
+			if tuple != nil {
+				// Set the tuple's recordID to a compatible type
+				tuple.Rid = &HeapRecordID{PageID: h.pageID, Slot: i - 1}
+				return tuple, nil
+			}
+		}
+		return nil, nil
 	}
 }

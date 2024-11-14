@@ -29,19 +29,29 @@ func makeTestVars(t *testing.T) (TupleDesc, Tuple, Tuple, *HeapFile, *BufferPool
 	td, t1, t2 := makeTupleTestVars()
 	tid := NewTID()
 	bp.BeginTransaction(tid)
+
+	// fmt.Println(&t1)
+	// fmt.Println(&t2)
+	// fmt.Println(tid)
+
 	return td, t1, t2, hf, bp, tid
 }
 
 func TestHeapFileCreateAndInsert(t *testing.T) {
 	_, t1, t2, hf, _, tid := makeTestVars(t)
+
 	err := hf.insertTuple(&t1, tid)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	//fmt.Println("GGGGGGG")
 
 	hf.insertTuple(&t2, tid)
+
 	iter, err := hf.Iterator(tid)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-
 	i := 0
 	for {
 		tup, err := iter()
