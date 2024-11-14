@@ -68,12 +68,11 @@ func NewHeapFile(fromFile string, td *TupleDesc, bp *BufferPool) (*HeapFile, err
 		file.Close() // ensure file is closed if there's an error
 		fmt.Println("Error creating file:", err)
 		return nil, err
-
 	}
 
 	heapFile.numPages = int(info.Size() / int64(PageSize))
 
-	fmt.Println("heap file successfully created")
+	//fmt.Println(heapFile.filename)
 	return heapFile, nil
 
 }
@@ -171,17 +170,21 @@ func (f *HeapFile) readPage(pageNo int) (Page, error) {
 
 	// Read the page data into a buffer
 	pageData := make([]byte, PageSize)
+
 	_, err = file.Read(pageData)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read page data: %v", err)
 	}
-
+	//fmt.Printf("Page data: %x\n", pageData[:100])
+	//fmt.Println(pageData)
 	// Create a new heapPage and initialize it with the buffer
 	hp := &heapPage{
 		// Assuming you have initialized fields specific to heapPage here, like pageNo, etc.
 		pageID: pageNo,
+		file:   f,
 	}
 	buffer := bytes.NewBuffer(pageData)
+
 	err = hp.initFromBuffer(buffer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize heapPage from buffer: %v", err)

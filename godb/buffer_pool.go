@@ -87,6 +87,7 @@ func (bp *BufferPool) GetPage(file DBFile, pageNo int, tid TransactionID, perm R
 
 	// Check if page is already in buffer pool
 	if page, exists := bp.pages[pageKey]; exists {
+		//fmt.Println("exisrtt")
 		return page, nil
 	}
 

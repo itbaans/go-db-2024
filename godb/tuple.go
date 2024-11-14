@@ -199,9 +199,7 @@ func (t *Tuple) writeTo(b *bytes.Buffer) error {
 // May return an error if the buffer has insufficent data to deserialize the
 // tuple.
 func readTupleFrom(b *bytes.Buffer, desc *TupleDesc) (*Tuple, error) {
-	fmt.Println("problem is here")
 	fields := make([]DBValue, len(desc.Fields))
-	fmt.Println("problem is here")
 	for i, f := range desc.Fields {
 		switch f.Ftype {
 		case IntType:

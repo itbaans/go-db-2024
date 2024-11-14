@@ -203,8 +203,13 @@ func (h *heapPage) initFromBuffer(buf *bytes.Buffer) error {
 	h.numSlots = int(numSlots)
 	h.usedSlots = int(usedSlots)
 
+	// fmt.Println(numSlots)
+	// fmt.Println(usedSlots)
+	//fmt.Println("in")
 	h.tuples = make([]*Tuple, h.numSlots)
+	//fmt.Println("out")
 	// Read tuples from buffer
+	//fmt.Println(h.file)
 	for i := 0; i < h.usedSlots; i++ {
 		tuple, err := readTupleFrom(buf, h.file.tupleDesc)
 		if err != nil {
