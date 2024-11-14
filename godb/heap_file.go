@@ -157,7 +157,8 @@ func (f *HeapFile) readPage(pageNo int) (Page, error) {
 	// Open the file for reading
 	file, err := os.Open(f.filename)
 	if err != nil {
-		return nil, fmt.Errorf("unable to open file: %v", err)
+		//fmt.Println("ff")
+		return nil, err
 	}
 	defer file.Close()
 
@@ -165,7 +166,7 @@ func (f *HeapFile) readPage(pageNo int) (Page, error) {
 	offset := int64(pageNo) * int64(PageSize)
 	_, err = file.Seek(offset, 0)
 	if err != nil {
-		return nil, fmt.Errorf("unable to seek to offset: %v", err)
+		return nil, err
 	}
 
 	// Read the page data into a buffer
@@ -173,7 +174,7 @@ func (f *HeapFile) readPage(pageNo int) (Page, error) {
 
 	_, err = file.Read(pageData)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read page data: %v", err)
+		return nil, err
 	}
 	//fmt.Printf("Page data: %x\n", pageData[:100])
 	//fmt.Println(pageData)
@@ -187,7 +188,7 @@ func (f *HeapFile) readPage(pageNo int) (Page, error) {
 
 	err = hp.initFromBuffer(buffer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize heapPage from buffer: %v", err)
+		return nil, err
 	}
 
 	return hp, nil
@@ -346,16 +347,25 @@ func (f *HeapFile) Iterator(tid TransactionID) (func() (*Tuple, error), error) {
 
 	next := func() (*Tuple, error) {
 		// Initialize first page if needed
-		if currentPage == nil {
+		// if currentPage == nil {
+		// 	var err error
+		// 	currentPage, err = f.nextPage(tid, currentPageNo)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
+		// }
+
+		// Continue searching from current position
+		fmt.Println(f.numPages)
+		for currentPageNo < f.numPages {
+
 			var err error
 			currentPage, err = f.nextPage(tid, currentPageNo)
 			if err != nil {
+				// Return EOF or other errors
 				return nil, err
 			}
-		}
 
-		// Continue searching from current position
-		for {
 			// Search current page
 			for i := currentTupleIndex; i < len(currentPage.tuples); i++ {
 				if currentPage.tuples[i] != nil {
@@ -374,13 +384,10 @@ func (f *HeapFile) Iterator(tid TransactionID) (func() (*Tuple, error), error) {
 			currentPageNo++
 			currentTupleIndex = 0
 
-			var err error
-			currentPage, err = f.nextPage(tid, currentPageNo)
-			if err != nil {
-				// Return EOF or other errors
-				return nil, err
-			}
 		}
+
+		fmt.Println("EOF REACHED FOR REAL THIS TIME")
+		return nil, nil
 	}
 
 	return next, nil

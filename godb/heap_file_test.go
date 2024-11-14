@@ -54,6 +54,7 @@ func TestHeapFileCreateAndInsert(t *testing.T) {
 	}
 	i := 0
 	for {
+		//fmt.Println(i)
 		tup, err := iter()
 		if err != nil {
 			t.Fatalf(err.Error())
