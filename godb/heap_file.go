@@ -343,51 +343,42 @@ func (f *HeapFile) Descriptor() *TupleDesc {
 func (f *HeapFile) Iterator(tid TransactionID) (func() (*Tuple, error), error) {
 	var currentPageNo int
 	var currentPage *heapPage
-	var currentTupleIndex int
+	var iter func() (*Tuple, error)
+	//var currentTupleIndex int
 
 	next := func() (*Tuple, error) {
 		// Initialize first page if needed
-		// if currentPage == nil {
-		// 	var err error
-		// 	currentPage, err = f.nextPage(tid, currentPageNo)
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
-		// }
-
-		// Continue searching from current position
-		fmt.Println(f.numPages)
-		for currentPageNo < f.numPages {
-
+		if currentPage == nil {
 			var err error
 			currentPage, err = f.nextPage(tid, currentPageNo)
 			if err != nil {
-				// Return EOF or other errors
 				return nil, err
 			}
+			iter = currentPage.tupleIter()
+		}
 
+		// Continue searching from current position
+		for {
 			// Search current page
-			for i := currentTupleIndex; i < len(currentPage.tuples); i++ {
-				if currentPage.tuples[i] != nil {
-					// Found a valid tuple
-					tuple := currentPage.tuples[i]
-					tuple.Rid = &HeapRecordID{PageID: currentPageNo, Slot: i}
-					tuple.Desc = *f.Descriptor()
-
-					// Update position for next call
-					currentTupleIndex = i + 1
-					return tuple, nil
-				}
+			tuple, err := iter()
+			if err != nil {
+				return nil, err
+			}
+			if tuple != nil {
+				tuple.Desc = *f.tupleDesc
+				return tuple, nil
 			}
 
 			// Move to next page
 			currentPageNo++
-			currentTupleIndex = 0
 
+			currentPage, err = f.nextPage(tid, currentPageNo)
+			if err != nil {
+				// Return EOF or other errors
+				return nil, nil
+			}
+			iter = currentPage.tupleIter()
 		}
-
-		fmt.Println("EOF REACHED FOR REAL THIS TIME")
-		return nil, nil
 	}
 
 	return next, nil
