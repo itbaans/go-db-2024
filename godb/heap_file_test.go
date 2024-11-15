@@ -127,6 +127,7 @@ func testSerializeN(t *testing.T, n int) {
 	tid := NewTID()
 	bp.BeginTransaction(tid)
 	for i := 0; i < n; i++ {
+		//fmt.Println(i)
 		if err := hf.insertTuple(&t1, tid); err != nil {
 			t.Fatalf(err.Error())
 		}

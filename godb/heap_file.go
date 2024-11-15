@@ -210,7 +210,10 @@ func (f *HeapFile) readPage(pageNo int) (Page, error) {
 // The page the tuple is inserted into should be marked as dirty.
 func (f *HeapFile) insertTuple(t *Tuple, tid TransactionID) error {
 
-	for pageNo := 0; pageNo < f.numPages; pageNo++ {
+	pageNo := 0
+
+	for ; pageNo < f.numPages; pageNo++ {
+		//fmt.Println(pageNo)
 		page, err := f.bufPool.GetPage(f, pageNo, tid, 0)
 		//fmt.Println("test1")
 
@@ -223,7 +226,7 @@ func (f *HeapFile) insertTuple(t *Tuple, tid TransactionID) error {
 		if !ok {
 			return fmt.Errorf("unexpected page type")
 		}
-
+		//fmt.Println(heapPage.usedSlots)
 		if heapPage.getNumSlots() > heapPage.usedSlots {
 			rid, err := heapPage.insertTuple(t)
 			//fmt.Println("test3")
@@ -235,10 +238,12 @@ func (f *HeapFile) insertTuple(t *Tuple, tid TransactionID) error {
 			//fmt.Println("test4")
 			return nil
 		}
+
 	}
 	// If all pages are full, create a new page and insert
 
-	newPage, err := newHeapPage(f.tupleDesc, f.numPages, f)
+	//fmt.Println("hree")
+	newPage, err := newHeapPage(f.tupleDesc, pageNo, f)
 	//fmt.Println("test5")
 	if err != nil {
 		return err
@@ -313,9 +318,19 @@ func (f *HeapFile) flushPage(p Page) error {
 		return err
 	}
 
-	err = os.WriteFile(f.filename, data.Bytes(), 0644)
+	offset := int64(heapPage.pageID) * int64(PageSize)
+	_, err = f.file.Seek(offset, 0)
 	if err != nil {
-		//fmt.Println("test3")
+		return err
+	}
+
+	_, err = f.file.Write(data.Bytes()) // Write data at the correct position
+	if err != nil {
+		return err
+	}
+
+	err = f.file.Sync() // Ensure data is flushed to disk
+	if err != nil {
 		return err
 	}
 

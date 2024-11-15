@@ -13,6 +13,7 @@ func TestHeapPageInsert(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	var expectedSlots = (PageSize - 8) / (StringLength + int(unsafe.Sizeof(int64(0))))
+	fmt.Println(expectedSlots)
 	if pg.getNumSlots() != expectedSlots {
 		t.Fatalf("Incorrect number of slots, expected %d, got %d", expectedSlots, pg.getNumSlots())
 	}
